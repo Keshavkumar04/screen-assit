@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+    <title>Screen Agent Overlay</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+        }
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="overlay-canvas"></canvas>
+    <script src="utils/overlayManager.js"></script>
+    <script>
+        const { ipcRenderer } = require('electron');
+        const canvas = document.getElementById('overlay-canvas');
+        const manager = new OverlayManager(canvas);
+
+        const dpr = window.devicePixelRatio || 1;
+        console.log(`[Overlay] DPR: ${dpr}, innerWidth: ${window.innerWidth}, innerHeight: ${window.innerHeight}`);
+
+        // Correction offset: Gemini's coordinates tend to be ~50px too high (Y too small)
+        // This is because the AI slightly underestimates Y positions in screenshots
+        const Y_CORRECTION = 50; // pixels in native resolution
+
+        ipcRenderer.on('draw-highlight', (event, data) => {
+            // Gemini gives coordinates in screenshot resolution (1920x1080 native pixels)
+            // Canvas is sized to CSS pixels (window.innerWidth x innerHeight)
+            // We need to convert from native → CSS by dividing by DPR
+            const correctedY = data.y + Y_CORRECTION;
+            const scaledX = Math.round(data.x / dpr);
+            const scaledY = Math.round(correctedY / dpr);
+            const scaledW = Math.round(data.width / dpr);
+            const scaledH = Math.round(data.height / dpr);
+            console.log(`[Overlay] Highlight: native(${data.x},${data.y}+${Y_CORRECTION}) ${data.width}x${data.height} → CSS(${scaledX},${scaledY}) ${scaledW}x${scaledH} label="${data.label}"`);
+            manager.addHighlight(scaledX, scaledY, scaledW, scaledH, data.label || '');
+        });
+
+        ipcRenderer.on('clear-highlights', () => {
+            manager.clearHighlights();
+        });
+    </script>
+</body>
+</html>

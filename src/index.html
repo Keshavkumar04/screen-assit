@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+    <head>
+        <meta http-equiv="content-security-policy" content="script-src 'self' 'unsafe-inline'" />
+        <title>Screen Agent</title>
+        <style>
+            html, body {
+                margin: 0;
+                padding: 0;
+                height: 100%;
+                overflow: hidden;
+                background: #1e1e1e;
+            }
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            }
+            * { box-sizing: border-box; }
+            bubble-app {
+                display: block;
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <script type="module" src="components/app/BubbleApp.js"></script>
+        <bubble-app id="screen-agent"></bubble-app>
+        <script src="utils/renderer.js"></script>
+    </body>
+</html>
