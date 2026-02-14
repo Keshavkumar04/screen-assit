@@ -4,20 +4,10 @@ const { spawn } = require('child_process');
 const { getAgentSystemPrompt } = require('./agentPrompt');
 
 let isInitializingSession = false;
-let sessionAlive = false; // Track if session is actually open
 let systemAudioProc = null;
 let messageBuffer = '';
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 3;
-
-// Catch unhandled EPIPE errors from writing to closed WebSocket
-process.on('uncaughtException', (err) => {
-    if (err.code === 'EPIPE' || err.message?.includes('broken pipe')) {
-        console.warn('[MAIN] Caught EPIPE error (writing to closed connection) - ignoring');
-        return;
-    }
-    console.error('[MAIN] Uncaught exception:', err);
-});
 
 // Logging counters (main process side)
 let micChunksReceived = 0;
@@ -228,11 +218,10 @@ async function initializeGeminiSession(apiKey, language = 'en-US') {
     try {
         console.log('[MAIN Gemini] Calling client.live.connect()...');
         const session = await client.live.connect({
-            model: 'gemini-2.5-flash-native-audio-latest',
+            model: 'gemini-2.5-flash-native-audio-preview-12-2025',
             callbacks: {
                 onopen: function () {
                     console.log('[MAIN Gemini] ✓ WebSocket OPEN - Live session connected!');
-                    sessionAlive = true;
                     sendToRenderer('update-status', 'Live session connected');
                 },
                 onmessage: function (message) {
@@ -332,45 +321,42 @@ async function initializeGeminiSession(apiKey, language = 'en-US') {
                     const code = e?.code || 'N/A';
                     const reason = e?.reason || 'unknown';
                     console.log(`[MAIN Gemini] 🔴 Session CLOSED. Reason: ${reason} Code: ${code}`);
-                    console.log(`[MAIN Gemini] Full close event:`, JSON.stringify(e, null, 2));
 
-                    sessionAlive = false;
-
-                    // Auto-reconnect on unexpected closes (not user-initiated close code 1000)
-                    if (code !== 1000 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    // Auto-reconnect on unexpected closes (not user-initiated)
+                    if (code !== 1000 && geminiSessionRef.current && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                         reconnectAttempts++;
-                        const delay = reconnectAttempts * 2000;
-                        console.log(`[MAIN Gemini] 🔄 Auto-reconnecting in ${delay/1000}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+                        console.log(`[MAIN Gemini] 🔄 Auto-reconnecting in 3 seconds... (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
                         sendToRenderer('update-status', `Reconnecting (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
                         setTimeout(async () => {
                             try {
                                 const newSession = await initializeGeminiSession(apiKey, language);
-                                if (newSession && global.geminiSessionRef) {
-                                    global.geminiSessionRef.current = newSession;
-                                    reconnectAttempts = 0;
+                                if (newSession) {
+                                    geminiSessionRef.current = newSession;
+                                    global.geminiSessionRef = geminiSessionRef;
+                                    reconnectAttempts = 0; // Reset on successful reconnect
                                     console.log('[MAIN Gemini] ✓ Auto-reconnected!');
                                 }
                             } catch (err) {
                                 console.error('[MAIN Gemini] Auto-reconnect failed:', err.message);
                                 sendToRenderer('update-status', 'Disconnected');
                             }
-                        }, delay);
+                        }, 3000);
+                    } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                        console.log('[MAIN Gemini] ❌ Max reconnect attempts reached. Giving up.');
+                        sendToRenderer('update-status', 'Disconnected - max retries reached');
+                        reconnectAttempts = 0;
                     } else {
-                        sendToRenderer('update-status', `Disconnected (code: ${code})`);
+                        sendToRenderer('update-status', 'Session closed');
                     }
                 },
             },
             config: {
                 responseModalities: ['AUDIO'],
                 tools: toolDeclarations,
-                inputAudioTranscription: { enabled: true },
-                outputAudioTranscription: { enabled: true },
-                speechConfig: {
-                    voiceConfig: {
-                        prebuiltVoiceConfig: { voiceName: 'Kore' },
-                    },
-                    languageCode: language,
-                },
+                inputAudioTranscription: {},
+                outputAudioTranscription: {},
+                contextWindowCompression: { slidingWindow: {} },
+                speechConfig: { languageCode: language },
                 systemInstruction: {
                     parts: [{ text: systemPrompt }],
                 },
@@ -421,7 +407,7 @@ async function startMacOSAudioCapture(geminiSessionRef) {
     if (!systemAudioProc.pid) return false;
 
     const CHUNK_DURATION = 0.1;
-    const SAMPLE_RATE = 16000;
+    const SAMPLE_RATE = 24000;
     const BYTES_PER_SAMPLE = 2;
     const CHANNELS = 2;
     const CHUNK_SIZE = SAMPLE_RATE * BYTES_PER_SAMPLE * CHANNELS * CHUNK_DURATION;
@@ -464,10 +450,10 @@ function stopMacOSAudioCapture() {
 }
 
 async function sendAudioToGemini(base64Data, geminiSessionRef) {
-    if (!geminiSessionRef.current || !sessionAlive) return;
+    if (!geminiSessionRef.current) return;
     try {
         await geminiSessionRef.current.sendRealtimeInput({
-            audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' },
+            audio: { data: base64Data, mimeType: 'audio/pcm;rate=24000' },
         });
     } catch (error) {
         console.error('Error sending audio to Gemini:', error);
@@ -491,7 +477,8 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     });
 
     ipcMain.handle('send-audio-content', async (event, { data, mimeType }) => {
-        if (!geminiSessionRef.current || !sessionAlive) {
+        if (!geminiSessionRef.current) {
+            console.warn('[MAIN IPC] send-audio-content: No active session!');
             return { success: false, error: 'No active session' };
         }
         try {
@@ -508,7 +495,8 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     });
 
     ipcMain.handle('send-mic-audio-content', async (event, { data, mimeType }) => {
-        if (!geminiSessionRef.current || !sessionAlive) {
+        if (!geminiSessionRef.current) {
+            console.warn('[MAIN IPC] send-mic-audio-content: No active session!');
             return { success: false, error: 'No active session' };
         }
         try {
@@ -525,7 +513,8 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     });
 
     ipcMain.handle('send-image-content', async (event, { data }) => {
-        if (!geminiSessionRef.current || !sessionAlive) {
+        if (!geminiSessionRef.current) {
+            console.warn('[MAIN IPC] send-image-content: No active session!');
             return { success: false, error: 'No active session' };
         }
         try {
@@ -550,7 +539,7 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     });
 
     ipcMain.handle('send-text-message', async (event, text) => {
-        if (!geminiSessionRef.current || !sessionAlive) return { success: false, error: 'No active session' };
+        if (!geminiSessionRef.current) return { success: false, error: 'No active session' };
         try {
             if (!text || text.trim().length === 0) return { success: false, error: 'Empty message' };
             console.log(`[MAIN IPC] Sending text to Gemini: "${text.trim()}"`);

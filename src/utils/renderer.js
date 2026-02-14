@@ -6,7 +6,7 @@ let screenshotInterval = null;
 let audioContext = null;
 let audioProcessor = null;
 let micAudioProcessor = null;
-const SAMPLE_RATE = 16000; // Gemini Live API requires 16kHz input audio
+const SAMPLE_RATE = 24000;
 const AUDIO_CHUNK_DURATION = 0.1;
 const BUFFER_SIZE = 4096;
 
@@ -222,7 +222,7 @@ function setupSystemAudioProcessing() {
             sysAudioChunksSent++;
             await ipcRenderer.invoke('send-audio-content', {
                 data: base64Data,
-                mimeType: 'audio/pcm;rate=16000',
+                mimeType: 'audio/pcm;rate=24000',
             });
         }
     };
@@ -252,7 +252,7 @@ function setupMicProcessing(micStream) {
             micChunksSent++;
             await ipcRenderer.invoke('send-mic-audio-content', {
                 data: base64Data,
-                mimeType: 'audio/pcm;rate=16000',
+                mimeType: 'audio/pcm;rate=24000',
             });
         }
     };

@@ -36,6 +36,12 @@
         // This is because the AI slightly underestimates Y positions in screenshots
         const Y_CORRECTION = 50; // pixels in native resolution
 
+        // Test: draw a highlight on load to verify overlay is working
+        setTimeout(() => {
+            console.log('[Overlay] TEST: Drawing test highlight at (500, 300)');
+            manager.addHighlight(500, 300, 300, 100, 'TEST HIGHLIGHT');
+        }, 3000);
+
         ipcRenderer.on('draw-highlight', (event, data) => {
             // Gemini gives coordinates in screenshot resolution (1920x1080 native pixels)
             // Canvas is sized to CSS pixels (window.innerWidth x innerHeight)
