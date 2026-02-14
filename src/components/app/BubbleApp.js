@@ -2,8 +2,8 @@ import { LitElement, html, css } from '../../assets/lit-all-2.7.4.min.js';
 const { ipcRenderer } = require('electron');
 
 const BUBBLE_SIZE = 80;
-const MENU_WIDTH = 280;
-const MENU_HEIGHT = 440;
+const MENU_WIDTH = 300;
+const MENU_HEIGHT = 480;
 
 class BubbleApp extends LitElement {
     static properties = {
@@ -28,246 +28,205 @@ class BubbleApp extends LitElement {
             height: 100%;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             overflow: hidden;
+            user-select: none;
         }
 
+        /* === BUBBLE === */
         .bubble {
             width: 60px;
             height: 60px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #4285f4, #1a73e8);
-            border: none;
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            border: 2px solid rgba(255, 255, 255, 0.15);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 4px 20px rgba(66, 133, 244, 0.4);
-            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 24px rgba(99, 102, 241, 0.4), 0 0 0 0 rgba(99, 102, 241, 0);
+            transition: transform 0.2s ease, box-shadow 0.3s ease, background 0.3s ease;
             position: relative;
             flex-shrink: 0;
+            -webkit-app-region: drag;
         }
 
         .bubble:hover {
-            transform: scale(1.05);
-            box-shadow: 0 6px 28px rgba(66, 133, 244, 0.6);
+            transform: scale(1.08);
+            box-shadow: 0 6px 32px rgba(99, 102, 241, 0.6), 0 0 0 0 rgba(99, 102, 241, 0);
         }
 
+        .bubble:active {
+            transform: scale(0.95);
+        }
+
+        /* Mic active - green breathing glow */
         .bubble.mic-active {
-            background: linear-gradient(135deg, #34a853, #1e8e3e);
-            box-shadow: 0 4px 20px rgba(52, 168, 83, 0.4);
-            animation: glow-green 2s ease-in-out infinite;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            border-color: rgba(34, 197, 94, 0.3);
+            box-shadow: 0 4px 24px rgba(34, 197, 94, 0.4);
+            animation: breathe-green 3s ease-in-out infinite;
         }
 
-        .bubble.ai-speaking {
-            animation: pulse-speak 1.2s ease-in-out infinite;
-        }
-
+        /* User is talking - red pulse */
         .bubble.talking {
-            background: linear-gradient(135deg, #ea4335, #d93025);
-            box-shadow: 0 4px 20px rgba(234, 67, 53, 0.5);
-            animation: glow-red 1s ease-in-out infinite;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            border-color: rgba(239, 68, 68, 0.3);
+            animation: pulse-red 0.8s ease-in-out infinite;
+        }
+
+        /* AI speaking - blue wave pulse */
+        .bubble.ai-speaking {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            border-color: rgba(59, 130, 246, 0.3);
+            animation: wave-blue 1.5s ease-in-out infinite;
         }
 
         .bubble.muted {
-            opacity: 0.6;
+            opacity: 0.5;
+            filter: grayscale(0.5);
         }
 
         .bubble-icon {
-            width: 28px;
-            height: 28px;
+            width: 26px;
+            height: 26px;
             fill: white;
+            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+            -webkit-app-region: no-drag;
+            pointer-events: none;
         }
 
         .mute-indicator {
             position: absolute;
-            top: -2px;
-            right: -2px;
-            width: 18px;
-            height: 18px;
-            background: #ea4335;
+            top: -4px;
+            right: -4px;
+            width: 20px;
+            height: 20px;
+            background: #ef4444;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 10px;
             color: white;
-            font-weight: bold;
+            font-weight: 700;
+            border: 2px solid #1e1e1e;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
         }
 
+        /* Ripple ring when talking */
+        .bubble.talking::before,
+        .bubble.talking::after {
+            content: '';
+            position: absolute;
+            inset: -6px;
+            border-radius: 50%;
+            border: 2px solid rgba(239, 68, 68, 0.4);
+            animation: ripple 1.5s ease-out infinite;
+        }
+        .bubble.talking::after {
+            animation-delay: 0.5s;
+        }
+
+        /* Audio wave rings when AI speaks */
+        .bubble.ai-speaking::before,
+        .bubble.ai-speaking::after {
+            content: '';
+            position: absolute;
+            inset: -8px;
+            border-radius: 50%;
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            animation: ripple 2s ease-out infinite;
+        }
+        .bubble.ai-speaking::after {
+            animation-delay: 0.7s;
+        }
+
+        /* === MENU === */
         .menu {
-            background: #2a2a2a;
-            border-radius: 16px;
-            padding: 12px;
+            background: rgba(30, 30, 30, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 18px;
+            padding: 14px;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 4px;
             width: 100%;
             flex: 1;
             overflow-y: auto;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            animation: menu-in 0.2s ease-out;
-            margin-bottom: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            animation: menu-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            margin-bottom: 10px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.4);
         }
+
+        .menu::-webkit-scrollbar { width: 4px; }
+        .menu::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
 
         .menu-btn {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 10px 14px;
+            gap: 12px;
+            padding: 11px 14px;
             border: none;
-            border-radius: 10px;
+            border-radius: 12px;
             background: transparent;
             color: #e5e5e7;
-            font-size: 14px;
+            font-size: 13.5px;
             cursor: pointer;
-            transition: background 0.15s;
+            transition: background 0.15s, transform 0.1s;
+            font-weight: 500;
         }
 
         .menu-btn:hover {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .menu-btn:active {
+            transform: scale(0.98);
         }
 
         .menu-btn.active {
-            background: rgba(66, 133, 244, 0.2);
-            color: #4285f4;
+            background: rgba(99, 102, 241, 0.15);
+            color: #818cf8;
         }
 
         .menu-btn.mic-active {
-            background: rgba(52, 168, 83, 0.2);
-            color: #34a853;
+            background: rgba(34, 197, 94, 0.12);
+            color: #4ade80;
         }
 
         .menu-btn.danger {
-            color: #ea4335;
+            color: #f87171;
         }
 
         .menu-btn.danger:hover {
-            background: rgba(234, 67, 53, 0.15);
+            background: rgba(248, 113, 113, 0.1);
         }
 
         .menu-icon {
-            width: 20px;
-            height: 20px;
+            width: 22px;
+            height: 22px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
+            font-size: 17px;
         }
 
         .menu-divider {
             height: 1px;
-            background: rgba(255, 255, 255, 0.1);
-            margin: 4px 0;
+            background: rgba(255, 255, 255, 0.06);
+            margin: 6px 0;
         }
 
         .status-bar {
-            padding: 6px 14px;
+            padding: 8px 14px;
             font-size: 11px;
-            color: rgba(255, 255, 255, 0.5);
+            color: rgba(255, 255, 255, 0.35);
             text-align: center;
+            letter-spacing: 0.3px;
         }
 
-        .text-input-row {
-            display: flex;
-            gap: 6px;
-            padding: 4px 0;
-        }
-
-        .text-input {
-            flex: 1;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 10px;
-            color: #e5e5e7;
-            padding: 10px 12px;
-            font-size: 13px;
-            outline: none;
-        }
-
-        .text-input::placeholder {
-            color: rgba(255, 255, 255, 0.3);
-        }
-
-        .text-input:focus {
-            border-color: #4285f4;
-        }
-
-        .send-btn {
-            background: linear-gradient(135deg, #4285f4, #1a73e8);
-            border: none;
-            border-radius: 10px;
-            color: white;
-            padding: 10px 14px;
-            font-size: 13px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: opacity 0.15s;
-        }
-
-        .send-btn:hover {
-            opacity: 0.9;
-        }
-
-        .send-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-
-        .language-select {
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 8px;
-            color: #e5e5e7;
-            padding: 8px 10px;
-            font-size: 13px;
-            cursor: pointer;
-            width: 100%;
-        }
-
-        .language-select option {
-            background: #1e1e1e;
-            color: #e5e5e7;
-        }
-
-        .settings-section {
-            padding: 8px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .settings-label {
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.5);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            padding: 0 6px;
-        }
-
-        .api-key-input {
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 8px;
-            color: #e5e5e7;
-            padding: 8px 10px;
-            font-size: 13px;
-            width: 100%;
-            box-sizing: border-box;
-        }
-
-        .api-key-input::placeholder {
-            color: rgba(255, 255, 255, 0.3);
-        }
-
-        @keyframes glow-green {
-            0%, 100% { box-shadow: 0 4px 20px rgba(52, 168, 83, 0.4); }
-            50% { box-shadow: 0 4px 35px rgba(52, 168, 83, 0.7); }
-        }
-
-        @keyframes glow-red {
-            0%, 100% { box-shadow: 0 4px 20px rgba(234, 67, 53, 0.5); }
-            50% { box-shadow: 0 4px 35px rgba(234, 67, 53, 0.8); }
-        }
-
+        /* === TALK BUTTON === */
         .talk-btn {
             display: flex;
             align-items: center;
@@ -275,25 +234,28 @@ class BubbleApp extends LitElement {
             gap: 8px;
             padding: 14px;
             border: none;
-            border-radius: 12px;
-            background: linear-gradient(135deg, #ea4335, #d93025);
+            border-radius: 14px;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
             color: white;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
             width: 100%;
             box-sizing: border-box;
+            box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3);
+            letter-spacing: 0.3px;
         }
 
         .talk-btn:hover {
-            opacity: 0.9;
             transform: scale(1.02);
+            box-shadow: 0 6px 24px rgba(239, 68, 68, 0.4);
         }
 
         .talk-btn.active {
-            background: linear-gradient(135deg, #34a853, #1e8e3e);
-            animation: glow-green 1.5s ease-in-out infinite;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
+            animation: breathe-green 2s ease-in-out infinite;
         }
 
         .talk-btn:disabled {
@@ -303,19 +265,126 @@ class BubbleApp extends LitElement {
 
         .shortcut-hint {
             font-size: 10px;
-            color: rgba(255,255,255,0.4);
+            color: rgba(255,255,255,0.3);
             text-align: center;
-            margin-top: -2px;
+            margin-top: -1px;
+            letter-spacing: 0.5px;
         }
 
-        @keyframes pulse-speak {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.08); }
+        /* === TEXT INPUT === */
+        .text-input-row {
+            display: flex;
+            gap: 6px;
+            padding: 4px 0;
+        }
+
+        .text-input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: #e5e5e7;
+            padding: 10px 14px;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .text-input::placeholder {
+            color: rgba(255, 255, 255, 0.25);
+        }
+
+        .text-input:focus {
+            border-color: rgba(99, 102, 241, 0.5);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .send-btn {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            padding: 10px 16px;
+            font-size: 13px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: opacity 0.15s, transform 0.1s;
+        }
+
+        .send-btn:hover { opacity: 0.9; }
+        .send-btn:active { transform: scale(0.96); }
+        .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        /* === SETTINGS === */
+        .language-select {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            color: #e5e5e7;
+            padding: 10px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            width: 100%;
+            transition: border-color 0.2s;
+        }
+
+        .language-select:focus { border-color: rgba(99, 102, 241, 0.5); outline: none; }
+        .language-select option { background: #1e1e1e; color: #e5e5e7; }
+
+        .settings-section {
+            padding: 8px 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .settings-label {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            padding: 0 6px;
+        }
+
+        .api-key-input {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            color: #e5e5e7;
+            padding: 10px 12px;
+            font-size: 13px;
+            width: 100%;
+            box-sizing: border-box;
+            outline: none;
+        }
+        .api-key-input:focus { border-color: rgba(99, 102, 241, 0.5); }
+        .api-key-input::placeholder { color: rgba(255, 255, 255, 0.25); }
+
+        /* === ANIMATIONS === */
+        @keyframes breathe-green {
+            0%, 100% { box-shadow: 0 4px 24px rgba(34, 197, 94, 0.3); }
+            50% { box-shadow: 0 4px 40px rgba(34, 197, 94, 0.6); }
+        }
+
+        @keyframes pulse-red {
+            0%, 100% { transform: scale(1); box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4); }
+            50% { transform: scale(1.06); box-shadow: 0 4px 32px rgba(239, 68, 68, 0.7); }
+        }
+
+        @keyframes wave-blue {
+            0%, 100% { transform: scale(1); box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3); }
+            50% { transform: scale(1.05); box-shadow: 0 4px 32px rgba(59, 130, 246, 0.6); }
+        }
+
+        @keyframes ripple {
+            0% { inset: -4px; opacity: 1; }
+            100% { inset: -20px; opacity: 0; }
         }
 
         @keyframes menu-in {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
+            from { opacity: 0; transform: translateY(10px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
         }
     `;
 
@@ -337,13 +406,15 @@ class BubbleApp extends LitElement {
 
         if (!this.menuOpen) {
             return html`
-                <button class="${bubbleClass}" @click="${this._toggleMenu}" @contextmenu="${this._openMenu}" title="${this.micActive ? (this.talking ? 'Click to stop recording' : 'Click to talk') : 'Click to open menu'}">
+                <button class="${bubbleClass}" @click="${this._toggleMenu}" @contextmenu="${this._openMenu}">
                     <svg class="bubble-icon" viewBox="0 0 24 24">
                         ${this.talking
-                            ? html`<path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>`
-                            : this.micActive
-                                ? html`<path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/><line x1="3" y1="3" x2="21" y2="21" stroke="white" stroke-width="2"/>`
-                                : html`<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>`
+                            ? html`<path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>`
+                            : this.aiSpeaking
+                                ? html`<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>`
+                                : this.micActive
+                                    ? html`<path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>`
+                                    : html`<circle cx="12" cy="12" r="3"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/>`
                         }
                     </svg>
                     ${this.muted ? html`<div class="mute-indicator">M</div>` : ''}
@@ -375,14 +446,14 @@ class BubbleApp extends LitElement {
                     class="talk-btn ${this.talking ? 'active' : ''}"
                     @click="${this._toggleTalk}"
                 >
-                    ${this.talking ? '🎙️ Recording... (click to stop)' : '🎤 Push to Talk'}
+                    ${this.talking ? '🎙️ Recording... (tap to stop)' : '🎤 Hold to Talk'}
                 </button>
-                <div class="shortcut-hint">or click bubble / Ctrl+Shift+A</div>
+                <div class="shortcut-hint">or press Ctrl+Shift+A</div>
             ` : ''}
 
             <button class="menu-btn ${this.muted ? 'active' : ''}" @click="${this._toggleMute}">
                 <span class="menu-icon">${this.muted ? '🔇' : '🔊'}</span>
-                ${this.muted ? 'Unmute' : 'Mute'}
+                ${this.muted ? 'Unmute AI' : 'Mute AI'}
             </button>
 
             <div class="menu-divider"></div>
@@ -443,14 +514,34 @@ class BubbleApp extends LitElement {
             <div class="settings-section">
                 <div class="settings-label">Language</div>
                 <select class="language-select" @change="${this._onLanguageChange}" .value="${this.selectedLanguage}">
-                    <option value="en-US">English</option>
-                    <option value="hi-IN">Hindi</option>
-                    <option value="es-ES">Spanish</option>
-                    <option value="fr-FR">French</option>
-                    <option value="de-DE">German</option>
-                    <option value="ja-JP">Japanese</option>
-                    <option value="ko-KR">Korean</option>
-                    <option value="zh-CN">Chinese</option>
+                    <option value="en-US">🇺🇸 English</option>
+                    <option value="hi-IN">🇮🇳 Hindi</option>
+                    <option value="bn-IN">🇮🇳 Bengali</option>
+                    <option value="ta-IN">🇮🇳 Tamil</option>
+                    <option value="te-IN">🇮🇳 Telugu</option>
+                    <option value="mr-IN">🇮🇳 Marathi</option>
+                    <option value="gu-IN">🇮🇳 Gujarati</option>
+                    <option value="kn-IN">🇮🇳 Kannada</option>
+                    <option value="ml-IN">🇮🇳 Malayalam</option>
+                    <option value="pa-IN">🇮🇳 Punjabi</option>
+                    <option value="es-ES">🇪🇸 Spanish</option>
+                    <option value="fr-FR">🇫🇷 French</option>
+                    <option value="de-DE">🇩🇪 German</option>
+                    <option value="pt-BR">🇧🇷 Portuguese</option>
+                    <option value="it-IT">🇮🇹 Italian</option>
+                    <option value="ru-RU">🇷🇺 Russian</option>
+                    <option value="ja-JP">🇯🇵 Japanese</option>
+                    <option value="ko-KR">🇰🇷 Korean</option>
+                    <option value="zh-CN">🇨🇳 Chinese</option>
+                    <option value="ar-SA">🇸🇦 Arabic</option>
+                    <option value="th-TH">🇹🇭 Thai</option>
+                    <option value="vi-VN">🇻🇳 Vietnamese</option>
+                    <option value="id-ID">🇮🇩 Indonesian</option>
+                    <option value="tr-TR">🇹🇷 Turkish</option>
+                    <option value="nl-NL">🇳🇱 Dutch</option>
+                    <option value="pl-PL">🇵🇱 Polish</option>
+                    <option value="uk-UA">🇺🇦 Ukrainian</option>
+                    <option value="sv-SE">🇸🇪 Swedish</option>
                 </select>
             </div>
 
@@ -464,7 +555,6 @@ class BubbleApp extends LitElement {
     }
 
     _toggleMenu() {
-        // If session is active and menu is closed, bubble click = push-to-talk toggle
         if (this.micActive && !this.menuOpen) {
             this._toggleTalk();
             return;
@@ -487,18 +577,13 @@ class BubbleApp extends LitElement {
     async _toggleMic() {
         if (this.micActive) {
             this.micActive = false;
+            this.talking = false;
             this.statusText = 'Stopped';
             if (window.cheddar) {
                 window.cheddar.stopCapture();
                 await ipcRenderer.invoke('close-session');
             }
         } else {
-            const apiKey = localStorage.getItem('apiKey')?.trim() || 'AIzaSyAvWEEOK6iobA4B032arOw3OPK9k9I80kQ';
-            if (!apiKey) {
-                this.settingsOpen = true;
-                this.statusText = 'Set API key first';
-                return;
-            }
             this.micActive = true;
             this.statusText = 'Connecting...';
             if (window.cheddar) {
@@ -559,11 +644,12 @@ class BubbleApp extends LitElement {
         this.selectedLanguage = e.target.value;
         localStorage.setItem('selectedLanguage', this.selectedLanguage);
         if (this.micActive) {
-            this.statusText = 'Restarting...';
-            await ipcRenderer.invoke('restart-gemini-with-language', this.selectedLanguage);
+            this.statusText = 'Restarting with new language...';
+            await ipcRenderer.invoke('close-session');
             if (window.cheddar) {
                 await window.cheddar.initializeGemini(this.selectedLanguage);
             }
+            this.statusText = 'Connected';
         }
     }
 

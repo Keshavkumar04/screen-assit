@@ -8,6 +8,8 @@ let systemAudioProc = null;
 let messageBuffer = '';
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 3;
+let lastMessageTime = 0;
+let livenessCheckInterval = null;
 
 // Logging counters (main process side)
 let micChunksReceived = 0;
@@ -223,9 +225,37 @@ async function initializeGeminiSession(apiKey, language = 'en-US') {
                 onopen: function () {
                     console.log('[MAIN Gemini] ✓ WebSocket OPEN - Live session connected!');
                     sendToRenderer('update-status', 'Live session connected');
+                    lastMessageTime = Date.now();
+
+                    // Start liveness check - if no messages for 60s, session is likely dead
+                    if (livenessCheckInterval) clearInterval(livenessCheckInterval);
+                    livenessCheckInterval = setInterval(() => {
+                        const silentFor = Date.now() - lastMessageTime;
+                        if (silentFor > 90000) { // 90 seconds of silence
+                            console.log(`[MAIN Gemini] ⚠ Session silent for ${Math.round(silentFor/1000)}s - likely dead, reconnecting...`);
+                            clearInterval(livenessCheckInterval);
+                            livenessCheckInterval = null;
+                            // Force close and reconnect
+                            if (global.geminiSessionRef?.current) {
+                                try { global.geminiSessionRef.current.close(); } catch(e) {}
+                                global.geminiSessionRef.current = null;
+                            }
+                            reconnectAttempts = 0;
+                            sendToRenderer('update-status', 'Reconnecting...');
+                            initializeGeminiSession(apiKey, language).then(newSession => {
+                                if (newSession && global.geminiSessionRef) {
+                                    global.geminiSessionRef.current = newSession;
+                                    console.log('[MAIN Gemini] ✓ Liveness reconnect successful');
+                                }
+                            }).catch(err => {
+                                console.error('[MAIN Gemini] Liveness reconnect failed:', err.message);
+                                sendToRenderer('update-status', 'Disconnected');
+                            });
+                        }
+                    }, 15000);
                 },
                 onmessage: function (message) {
-                    // Log the raw message structure (keys only to avoid huge logs)
+                    lastMessageTime = Date.now();
                     const msgKeys = Object.keys(message || {});
                     const hasServerContent = !!message.serverContent;
                     const hasToolCall = !!message.toolCall;
@@ -253,12 +283,11 @@ async function initializeGeminiSession(apiKey, language = 'en-US') {
                                 });
                             }
 
-                            // Handle text output (fallback)
+                            // Handle text output (model thinking - don't show to user)
                             if (part.text) {
                                 textResponsesReceived++;
-                                messageBuffer += part.text;
-                                console.log(`[MAIN Gemini] 📝 TEXT: "${part.text}"`);
-                                sendToRenderer('update-response', messageBuffer);
+                                // This is the model's internal "thinking" text - just log it, don't show
+                                console.log(`[MAIN Gemini] 💭 THINKING: "${part.text.substring(0, 100)}..."`);
                             }
 
                             // Handle output audio transcription
@@ -318,6 +347,7 @@ async function initializeGeminiSession(apiKey, language = 'en-US') {
                     sendToRenderer('update-status', isApiKeyError ? 'Error: Invalid API key' : 'Error: ' + e.message);
                 },
                 onclose: function (e) {
+                    if (livenessCheckInterval) { clearInterval(livenessCheckInterval); livenessCheckInterval = null; }
                     const code = e?.code || 'N/A';
                     const reason = e?.reason || 'unknown';
                     console.log(`[MAIN Gemini] 🔴 Session CLOSED. Reason: ${reason} Code: ${code}`);
@@ -359,6 +389,9 @@ async function initializeGeminiSession(apiKey, language = 'en-US') {
                 speechConfig: { languageCode: language },
                 systemInstruction: {
                     parts: [{ text: systemPrompt }],
+                },
+                thinkingConfig: {
+                    thinkingBudget: 0,
                 },
             },
         });
