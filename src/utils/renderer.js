@@ -6,7 +6,7 @@ let screenshotInterval = null;
 let audioContext = null;
 let audioProcessor = null;
 let micAudioProcessor = null;
-const SAMPLE_RATE = 24000;
+const SAMPLE_RATE = 16000; // Gemini Live API requires 16kHz input audio
 const AUDIO_CHUNK_DURATION = 0.1;
 const BUFFER_SIZE = 4096;
 
@@ -72,7 +72,7 @@ function arrayBufferToBase64(buffer) {
 }
 
 // --- Gemini initialization ---
-const HARDCODED_API_KEY = 'AIzaSyAvWEEOK6iobA4B032arOw3OPK9k9I80kQ';
+const HARDCODED_API_KEY = 'AIzaSyDdNa_6D3WKoGrdj9UpuR7K0i6dS5YVIqI';
 
 async function initializeGemini(language = 'en-US') {
     const apiKey = localStorage.getItem('apiKey')?.trim() || HARDCODED_API_KEY;
@@ -222,7 +222,7 @@ function setupSystemAudioProcessing() {
             sysAudioChunksSent++;
             await ipcRenderer.invoke('send-audio-content', {
                 data: base64Data,
-                mimeType: 'audio/pcm;rate=24000',
+                mimeType: 'audio/pcm;rate=16000',
             });
         }
     };
@@ -252,7 +252,7 @@ function setupMicProcessing(micStream) {
             micChunksSent++;
             await ipcRenderer.invoke('send-mic-audio-content', {
                 data: base64Data,
-                mimeType: 'audio/pcm;rate=24000',
+                mimeType: 'audio/pcm;rate=16000',
             });
         }
     };
